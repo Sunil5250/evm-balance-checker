@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Historical Balance Checker</title>
+  <style>
+    body{font-family:sans-serif;max-width:600px;margin:40px auto}
+    label{display:block;margin:10px 0}
+    input,select{width:100%;padding:8px;font-size:16px}
+    button{margin-top:15px;padding:10px 22px;font-size:16px}
+    pre{background:#f7f7f7;padding:12px;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <h1>EVM Historical Balance</h1>
+
+  <label>Address
+    <input id="addr" placeholder="0x…">
+  </label>
+
+  <label>Date (UTC midnight)
+    <input type="date" id="date">
+  </label>
+
+  <label>Chain
+    <select id="chain">
+      <option value="eth">Ethereum</option>
+      <option value="polygon">Polygon</option>
+      <option value="bsc">BNB Smart Chain</option>
+      <option value="arbitrum">Arbitrum</option>
+      <option value="optimism">Optimism</option>
+      <option value="base">Base</option>
+      <option value="avalanche">Avalanche</option>
+      <option value="fantom">Fantom</option>
+    </select>
+  </label>
+
+  <button id="go">Fetch Balance</button>
+  <pre id="out">—</pre>
+
+<script>
+const $ = (sel) => document.querySelector(sel);
+$('#go').onclick = async () => {
+  $('#go').disabled = true;
+  $('#out').textContent = 'Loading…';
+  try {
+    const res = await fetch('/api/balance', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        address: $('#addr').value.trim(),
+        date: $('#date').value,
+        chain: $('#chain').value
+      })
+    });
+    const text = await res.text();
+    $('#out').textContent = res.ok ? text : `Error: ${text}`;
+  } finally {
+    $('#go').disabled = false;
+  }
+};
+</script>
+</body>
+</html>
