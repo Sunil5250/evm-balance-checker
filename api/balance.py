@@ -1,44 +1,36 @@
-import json, requests, datetime, os
+import json, os, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler
 
-BITQUERY_KEY = os.getenv("BITQUERY_KEY", "free-demo-key")  # fallback for quick test
-
+BITQUERY_KEY = os.getenv("BITQUERY_KEY", "free-demo-key")
 CHAIN_MAP = {
-    "eth": "ethereum",
-    "polygon": "polygon",
-    "bsc": "bsc",
-    "arbitrum": "arbitrum",
-    "optimism": "optimism",
-    "base": "base",
-    "avalanche": "avalanche",
-    "fantom": "fantom",
+    "eth":"ethereum","polygon":"polygon","bsc":"bsc",
+    "arbitrum":"arbitrum","optimism":"optimism","base":"base",
+    "avalanche":"avalanche","fantom":"fantom"
 }
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        addr  = body["address"]
-        date  = body["date"] + "T00:00:00Z"
-        chain = CHAIN_MAP[body["chain"]]
+        addr, date, chain = body["address"], body["date"] + "T00:00:00Z", CHAIN_MAP[body["chain"]]
 
-        query = """
-        query($addr:String!,$date:ISO8601DateTime){
+        query = {"query":"""
+        query($a:String!,$d:ISO8601DateTime){
           ethereum(network:%s){
-            address(address:{is:$addr}){
-              balances(time:{before:$date},currency:{}){
-                currency{symbol}
-                value
+            address(address:{is:$a}){
+              balances(time:{before:$d},currency:{}){
+                currency{symbol} value
               }
             }
           }
-        }""" % chain
+        }""" % chain, "variables":{"a":addr,"d":date}}
 
-        res = requests.post(
+        req = urllib.request.Request(
             "https://streaming.bitquery.io/graphql",
-            headers={"X-API-KEY": BITQUERY_KEY},
-            json={"query": query, "variables": {"addr": addr, "date": date}}
+            data=json.dumps(query).encode(),
+            headers={"Content-Type":"application/json","X-API-KEY":BITQUERY_KEY}
         )
-        data = res.json()["data"]["ethereum"]["address"][0]["balances"]
+        res = json.loads(urllib.request.urlopen(req).read())
+        data = res["data"]["ethereum"]["address"][0]["balances"]
 
         out = [f"{float(b['value']):>15.6f} {b['currency']['symbol']}" for b in data]
         self.send_response(200)
