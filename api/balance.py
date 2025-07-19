@@ -18,28 +18,29 @@ class handler(BaseHTTPRequestHandler):
             chain = CHAIN_MAP[body["chain"]]
 
             payload = {
-                "query": """
-query($a:String!,$d:ISO8601DateTime,$net:EthereumNetwork){
-  ethereum(network:$net){
-    address(address:{is:$a}){
-      balances(time:{before:$d},currency:{}){
-        currency{symbol}
+                "query": f"""
+{{
+  ethereum(network: {chain}) {{
+    address(address: "{addr}") {{
+      balances(time: {{before: "{date}"}}, currency: {{}}) {{
+        currency {{symbol}}
         value
-      }
-    }
-  }
-}""",
-                "variables": {"a": addr, "d": date, "net": chain.upper()}
+      }}
+    }}
+  }}
+}}"""
             }
 
             req = urllib.request.Request(
                 "https://streaming.bitquery.io/graphql",
                 data=json.dumps(payload).encode(),
-                headers={"Content-Type":"application/json","X-API-KEY":BITQUERY_KEY}
+                headers={"Content-Type": "application/json", "X-API-KEY": BITQUERY_KEY}
             )
             res = json.loads(urllib.request.urlopen(req).read())
-            addr_data = res["data"]["ethereum"]
-            balances  = (addr_data or {}).get("address", [{}])[0].get("balances", [])
+
+            data_root = res.get("data", {})
+            address_node = (data_root.get("ethereum") or {}).get("address", [{}])[0]
+            balances = address_node.get("balances", [])
 
             if not balances:
                 self.send_response(200)
