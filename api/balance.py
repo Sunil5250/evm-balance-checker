@@ -10,14 +10,14 @@ BITQUERY_KEY = os.getenv("BITQUERY_KEY")
 
 # 2. map from user-friendly name to Bitquery network enum
 CHAIN_MAP = {
-    "eth": "ethereum",
-    "polygon": "polygon",
-    "bsc": "bsc",
-    "arbitrum": "arbitrum",
-    "optimism": "optimism",
-    "base": "base",
-    "avalanche": "avalanche",
-    "fantom": "fantom",
+    "eth": "Ethereum",
+    "polygon": "Polygon",
+    "bsc": "BSC",
+    "arbitrum": "Arbitrum",
+    "optimism": "Optimism",
+    "base": "Base",
+    "avalanche": "Avalanche",
+    "fantom": "Fantom",
 }
 
 class handler(BaseHTTPRequestHandler):
