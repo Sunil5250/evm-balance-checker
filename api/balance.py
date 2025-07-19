@@ -1,35 +1,22 @@
-import json
-import os
-import urllib.request
-import urllib.error
-import traceback
+import json, os, urllib.request, urllib.error, traceback
 from http.server import BaseHTTPRequestHandler
 
-# 1. read the key from Vercel’s env
 BITQUERY_KEY = os.getenv("BITQUERY_KEY")
 
-# 2. map from user-friendly name to Bitquery network enum
 CHAIN_MAP = {
-    "eth": "Ethereum",
-    "polygon": "Polygon",
-    "bsc": "BSC",
-    "arbitrum": "Arbitrum",
-    "optimism": "Optimism",
-    "base": "Base",
-    "avalanche": "Avalanche",
-    "fantom": "Fantom",
+    "eth": "ethereum", "polygon": "polygon", "bsc": "bsc",
+    "arbitrum": "arbitrum", "optimism": "optimism", "base": "base",
+    "avalanche": "avalanche", "fantom": "fantom"
 }
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            # read JSON body
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             addr  = body["address"]
             date  = body["date"] + "T00:00:00Z"
             chain = CHAIN_MAP[body["chain"]]
 
-            # GraphQL query with variables
             payload = {
                 "query": """
 query($a:String!,$d:ISO8601DateTime,$net:EthereumNetwork){
@@ -42,39 +29,32 @@ query($a:String!,$d:ISO8601DateTime,$net:EthereumNetwork){
     }
   }
 }""",
-                "variables": {
-                    "a": addr,
-                    "d": date,
-                    "net": chain,
-                },
+                "variables": {"a": addr, "d": date, "net": chain.upper()}
             }
 
-            # send request
             req = urllib.request.Request(
                 "https://streaming.bitquery.io/graphql",
                 data=json.dumps(payload).encode(),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-API-KEY": BITQUERY_KEY,
-                },
+                headers={"Content-Type":"application/json","X-API-KEY":BITQUERY_KEY}
             )
             res = json.loads(urllib.request.urlopen(req).read())
+            addr_data = res["data"]["ethereum"]
+            balances  = (addr_data or {}).get("address", [{}])[0].get("balances", [])
 
-            # extract balances
-            balances = res["data"]["ethereum"]["address"][0]["balances"]
-            out = [
-                f"{float(b['value']):>15.6f} {b['currency']['symbol']}"
-                for b in balances
-            ]
+            if not balances:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"No balances found\n")
+                return
 
-            # return success
+            out = [f"{float(b['value']):>15.6f} {b['currency']['symbol']}" for b in balances]
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             self.wfile.write("\n".join(out).encode())
 
         except Exception:
-            # return full traceback so we always see the error
             self.send_response(500)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
