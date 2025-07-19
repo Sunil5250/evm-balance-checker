@@ -1,59 +1,43 @@
 import json, os, urllib.request, urllib.error, traceback
 from http.server import BaseHTTPRequestHandler
 
-BITQUERY_KEY = os.getenv("BITQUERY_KEY")
+ETHERSCAN_KEY = os.getenv("ETHERSCAN_KEY")  # optional (free tier allows 5/sec)
 
-CHAIN_MAP = {
-    "eth": "Ethereum",
-    "polygon": "Polygon",
-    "bsc": "BSC",
-    "arbitrum": "Arbitrum",
-    "optimism": "Optimism",
-    "base": "Base",
-    "avalanche": "Avalanche",
-    "fantom": "Fantom"
+CHAIN_RPC = {
+    "eth": "https://api.etherscan.io/api",
+    "polygon": "https://api.polygonscan.com/api",
+    "bsc": "https://api.bscscan.com/api",
+    "arbitrum": "https://api.arbiscan.io/api",
+    "optimism": "https://api-optimistic.etherscan.io/api",
+    "base": "https://api.basescan.org/api",
+    "avalanche": "https://api.snowtrace.io/api",
+    "fantom": "https://api.ftmscan.com/api",
 }
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            addr  = body["address"]
-            date  = body["date"] + "T00:00:00Z"
-            net   = CHAIN_MAP[body["chain"]]
+            addr = body["address"]
+            date = body["date"]
+            chain = body["chain"]
+            api_url = CHAIN_RPC[chain]
 
-            query = f"""
-{{
-  ethereum(network: {net}) {{
-    address(address: "{addr}") {{
-      balances(time: {{before: "{date}"}}, currency: {{}}) {{
-        currency {{symbol}}
-        value
-      }}
-    }}
-  }}
-}}"""
+            # get block number closest to that date
+            ts = int(__import__("datetime").datetime.strptime(date, "%Y-%m-%d").timestamp())
+            blk_url = f"{api_url}?module=block&action=getblocknobytime&timestamp={ts}&closest=before&apikey={ETHERSCAN_KEY or ''}"
+            blk_res = json.loads(urllib.request.urlopen(blk_url).read())
+            block = blk_res["result"]
 
-            req = urllib.request.Request(
-                "https://streaming.bitquery.io/graphql",
-                data=query.encode(),
-                headers={"Content-Type": "application/json", "X-API-KEY": BITQUERY_KEY}
-            )
-            res = json.loads(urllib.request.urlopen(req).read())
+            # get balance at that block
+            bal_url = f"{api_url}?module=account&action=balance&address={addr}&tag={block}&apikey={ETHERSCAN_KEY or ''}"
+            bal_res = json.loads(urllib.request.urlopen(bal_url).read())
+            balance = int(bal_res["result"]) / 1e18
 
-            balances = res.get("data", {}).get("ethereum", {}).get("address", [{}])[0].get("balances", [])
-            if not balances:
-                self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"No balances found\n")
-                return
-
-            out = [f"{float(b['value']):>15.6f} {b['currency']['symbol']}" for b in balances]
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
-            self.wfile.write("\n".join(out).encode())
+            self.wfile.write(f"{balance:.6f} ETH\n".encode())
 
         except Exception:
             self.send_response(500)
