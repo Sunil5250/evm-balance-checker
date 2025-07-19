@@ -3,10 +3,15 @@ from http.server import BaseHTTPRequestHandler
 
 BITQUERY_KEY = os.getenv("BITQUERY_KEY")
 
-CHAIN_MAP = {
-    "eth": "ethereum", "polygon": "polygon", "bsc": "bsc",
-    "arbitrum": "arbitrum", "optimism": "optimism", "base": "base",
-    "avalanche": "avalanche", "fantom": "fantom"
+CHAIN_MAP = {  # exact camel-case names Bitquery expects
+    "eth": "Ethereum",
+    "polygon": "Polygon",
+    "bsc": "BSC",
+    "arbitrum": "Arbitrum",
+    "optimism": "Optimism",
+    "base": "Base",
+    "avalanche": "Avalanche",
+    "fantom": "Fantom"
 }
 
 class handler(BaseHTTPRequestHandler):
@@ -15,20 +20,21 @@ class handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             addr  = body["address"]
             date  = body["date"] + "T00:00:00Z"
-            chain = CHAIN_MAP[body["chain"]]
+            network = CHAIN_MAP[body["chain"]]
 
             payload = {
-                "query": f"""
-{{
-  ethereum(network: {chain}) {{
-    address(address: "{addr}") {{
-      balances(time: {{before: "{date}"}}, currency: {{}}) {{
-        currency {{symbol}}
+                "query": """
+query($a:String!,$d:ISO8601DateTime,$net:EthereumNetwork!){
+  ethereum(network:$net){
+    address(address:{is:$a}){
+      balances(time:{before:$d},currency:{}){
+        currency{symbol}
         value
-      }}
-    }}
-  }}
-}}"""
+      }
+    }
+  }
+}""",
+                "variables": {"a": addr, "d": date, "net": network}
             }
 
             req = urllib.request.Request(
@@ -38,9 +44,11 @@ class handler(BaseHTTPRequestHandler):
             )
             res = json.loads(urllib.request.urlopen(req).read())
 
+            # safe traversal
             data_root = res.get("data", {})
-            address_node = (data_root.get("ethereum") or {}).get("address", [{}])[0]
-            balances = address_node.get("balances", [])
+            ethereum = data_root.get("ethereum", {})
+            address  = ethereum.get("address")
+            balances = address[0]["balances"] if address else []
 
             if not balances:
                 self.send_response(200)
